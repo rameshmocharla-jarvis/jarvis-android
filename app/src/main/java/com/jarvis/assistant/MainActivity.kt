@@ -1,4 +1,3 @@
-import android.content.IntentFilter
 package com.jarvis.assistant
 
 import android.Manifest
@@ -6,13 +5,19 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
+import android.os.BatteryManager
 import android.os.Bundle
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.provider.Settings
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.graphics.Color
+import android.view.Gravity
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -20,84 +25,117 @@ import java.util.Locale
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
+    private lateinit var speech: TextToSpeech
+    private var recognizer: SpeechRecognizer? = null
     private lateinit var status: TextView
-    private lateinit var tts: TextToSpeech
-    private var speechRecognizer: SpeechRecognizer? = null
     private var flashOn = false
+    private var cameraId: String? = null
 
     private val permissionLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { granted ->
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) startListening()
-            else speak("Microphone permission denied")
+            else speak("Microphone permission is required.")
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        tts = TextToSpeech(this, this)
+        speech = TextToSpeech(this, this)
+        setupCamera()
+        createInterface()
+    }
 
+    private fun createInterface() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(35, 60, 35, 35)
-            setBackgroundColor(android.graphics.Color.BLACK)
+            gravity = Gravity.CENTER
+            setPadding(28, 30, 28, 30)
+            setBackgroundColor(Color.rgb(5, 8, 15))
+        }
+
+        val title = TextView(this).apply {
+            text = "J.A.R.V.I.S."
+            textSize = 34f
+            setTextColor(Color.CYAN)
+            gravity = Gravity.CENTER
         }
 
         status = TextView(this).apply {
-            text = "J.A.R.V.I.S.\nSYSTEM ONLINE"
-            textSize = 27f
-            setTextColor(android.graphics.Color.CYAN)
-            gravity = android.view.Gravity.CENTER
+            text = "SYSTEM ONLINE"
+            textSize = 16f
+            setTextColor(Color.GREEN)
+            gravity = Gravity.CENTER
+            setPadding(0, 24, 0, 30)
         }
 
-        val voiceButton = Button(this).apply {
-            text = "ACTIVATE VOICE"
-            setOnClickListener { checkMicrophone() }
-        }
-
-        val flashlightButton = Button(this).apply {
-            text = "FLASHLIGHT"
-            setOnClickListener { toggleFlashlight() }
-        }
-
-        val volumeButton = Button(this).apply {
-            text = "VOLUME SETTINGS"
-            setOnClickListener {
-                startActivity(
-                    Intent("android.settings.SOUND_SETTINGS")
-                )
-            }
-        }
-
+        layout.addView(title)
         layout.addView(status)
-        layout.addView(voiceButton)
-        layout.addView(flashlightButton)
-        layout.addView(volumeButton)
+
+        addButton(layout, "ACTIVATE VOICE") {
+            checkMicrophonePermission()
+        }
+
+        addButton(layout, "FLASHLIGHT") {
+            toggleFlashlight()
+        }
+
+        addButton(layout, "BATTERY STATUS") {
+            batteryStatus()
+        }
+
+        addButton(layout, "OPEN YOUTUBE") {
+            openYouTube()
+        }
+
+        addButton(layout, "WI-FI SETTINGS") {
+            startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+        }
+
+        addButton(layout, "BLUETOOTH SETTINGS") {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        }
 
         setContentView(layout)
     }
 
+    private fun addButton(
+        layout: LinearLayout,
+        text: String,
+        action: () -> Unit
+    ) {
+        val button = Button(this).apply {
+            this.text = text
+            setTextColor(Color.CYAN)
+            setBackgroundColor(Color.rgb(18, 35, 48))
+            textSize = 15f
+            setOnClickListener { action() }
+        }
+
+        val params = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        params.setMargins(0, 8, 0, 8)
+        layout.addView(button, params)
+    }
+
     override fun onInit(result: Int) {
         if (result == TextToSpeech.SUCCESS) {
-            tts.language = Locale.US
-            speak("JARVIS system online")
+            speech.language = Locale.US
+            speak("JARVIS system online. How can I help you?")
         }
     }
 
     private fun speak(message: String) {
-        if (::tts.isInitialized) {
-            tts.speak(
-                message,
-                TextToSpeech.QUEUE_FLUSH,
-                null,
-                "JARVIS"
-            )
+        if (::speech.isInitialized) {
+            speech.speak(message, TextToSpeech.QUEUE_FLUSH, null, "JARVIS")
         }
-        status.text = "J.A.R.V.I.S.\n$message"
+        if (::status.isInitialized) {
+            status.text = message
+        }
     }
 
-    private fun checkMicrophone() {
+    private fun checkMicrophonePermission() {
         if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.RECORD_AUDIO
@@ -111,40 +149,46 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private fun startListening() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            speak("Speech recognition is unavailable")
+            speak("Speech recognition is not available.")
             return
         }
 
-        speechRecognizer?.destroy()
+        recognizer?.destroy()
+        recognizer = SpeechRecognizer.createSpeechRecognizer(this)
 
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-
-        speechRecognizer?.setRecognitionListener(
-            object : android.speech.RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    status.text = "LISTENING..."
-                }
-
-                override fun onResults(results: Bundle?) {
-                    val words = results?.getStringArrayList(
-                        SpeechRecognizer.RESULTS_RECOGNITION
-                    )
-                    val command = words?.firstOrNull()?.lowercase() ?: ""
-                    handleCommand(command)
-                }
-
-                override fun onError(error: Int) {
-                    status.text = "VOICE ERROR: $error"
-                }
-
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {}
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
+        recognizer?.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {
+                speak("Listening.")
             }
-        )
+
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+
+            override fun onEndOfSpeech() {
+                status.text = "PROCESSING..."
+            }
+
+            override fun onError(error: Int) {
+                speak("I could not understand. Please try again.")
+            }
+
+            override fun onResults(results: Bundle?) {
+                val commands = results?.getStringArrayList(
+                    SpeechRecognizer.RESULTS_RECOGNITION
+                )
+                val command = commands?.firstOrNull()?.lowercase(Locale.US)
+
+                if (command != null) {
+                    processCommand(command)
+                } else {
+                    speak("Please repeat your command.")
+                }
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
@@ -152,91 +196,102 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
             )
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to JARVIS")
         }
 
-        speechRecognizer?.startListening(intent)
+        recognizer?.startListening(intent)
     }
 
-    private fun handleCommand(command: String) {
+    private fun processCommand(command: String) {
         when {
-            command.contains("flashlight on") ||
-            command.contains("torch on") -> {
-                setFlashlight(true)
-                speak("Flashlight turned on")
+            "hello" in command || "hi" in command ->
+                speak("Hello. I am JARVIS. How can I help?")
+
+            "flashlight" in command || "torch" in command ->
+                toggleFlashlight()
+
+            "battery" in command ->
+                batteryStatus()
+
+            "youtube" in command ->
+                openYouTube()
+
+            "wifi" in command || "wi-fi" in command -> {
+                speak("Opening Wi-Fi settings.")
+                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
             }
 
-            command.contains("flashlight off") ||
-            command.contains("torch off") -> {
-                setFlashlight(false)
-                speak("Flashlight turned off")
+            "bluetooth" in command -> {
+                speak("Opening Bluetooth settings.")
+                startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
             }
 
-            command.contains("volume") -> {
-                startActivity(Intent("android.settings.SOUND_SETTINGS"))
-                speak("Opening volume settings")
+            "time" in command -> {
+                val time = java.text.SimpleDateFormat(
+                    "hh:mm a",
+                    Locale.getDefault()
+                ).format(java.util.Date())
+                speak("The time is $time")
             }
 
-            command.contains("wifi") -> {
-                startActivity(Intent("android.settings.WIFI_SETTINGS"))
-                speak("Opening Wi-Fi settings")
-            }
+            else ->
+                speak("I heard $command, but I do not know that command yet.")
+        }
+    }
 
-            command.contains("bluetooth") -> {
-                startActivity(Intent("android.settings.BLUETOOTH_SETTINGS"))
-                speak("Opening Bluetooth settings")
+    private fun setupCamera() {
+        try {
+            val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            cameraId = manager.cameraIdList.firstOrNull { id ->
+                manager.getCameraCharacteristics(id).get(
+                    android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE
+                ) == true
             }
-
-            command.contains("battery") -> {
-                val battery = registerReceiver(
-                    null,
-                    IntentFilter("android.intent.action.BATTERY_CHANGED")
-                )
-                val level = battery?.getIntExtra("level", -1) ?: -1
-                speak("Battery level is $level percent")
-            }
-
-            command.contains("youtube") -> {
-                val intent = packageManager.getLaunchIntentForPackage(
-                    "com.google.android.youtube"
-                )
-                if (intent != null) startActivity(intent)
-                else speak("YouTube is not installed")
-            }
-
-            else -> speak("Command not recognized: $command")
+        } catch (_: Exception) {
+            cameraId = null
         }
     }
 
     private fun toggleFlashlight() {
-        setFlashlight(!flashOn)
-        speak(if (flashOn) "Flashlight on" else "Flashlight off")
-    }
-
-    private fun setFlashlight(enabled: Boolean) {
         try {
-            val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            val cameraId = manager.cameraIdList.firstOrNull {
-                manager.getCameraCharacteristics(it)
-                    .get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
-            }
-
-            if (cameraId == null) {
-                speak("Flashlight unavailable")
+            val id = cameraId
+            if (id == null) {
+                speak("Flashlight is not available.")
                 return
             }
 
-            manager.setTorchMode(cameraId, enabled)
-            flashOn = enabled
-        } catch (e: Exception) {
-            speak("Unable to control flashlight")
+            flashOn = !flashOn
+            val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            manager.setTorchMode(id, flashOn)
+
+            speak(if (flashOn) "Flashlight turned on." else "Flashlight turned off.")
+        } catch (_: Exception) {
+            speak("Unable to control flashlight.")
+        }
+    }
+
+    private fun batteryStatus() {
+        val manager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        val level = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        speak("Your battery level is $level percent.")
+    }
+
+    private fun openYouTube() {
+        val intent = packageManager.getLaunchIntentForPackage("com.google.android.youtube")
+        if (intent != null) {
+            startActivity(intent)
+            speak("Opening YouTube.")
+        } else {
+            speak("YouTube app is not installed.")
         }
     }
 
     override fun onDestroy() {
-        speechRecognizer?.destroy()
-        tts.stop()
-        tts.shutdown()
+        recognizer?.destroy()
+        if (::speech.isInitialized) {
+            speech.stop()
+            speech.shutdown()
+        }
         super.onDestroy()
     }
 }
-
