@@ -236,8 +236,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 speak("The time is $time")
             }
 
-            else ->
-                speak("I heard $command, but I do not know that command yet.")
+            else -> {
+    speak("Let me think.")
+    askGemini(command)
+            }
+        
         }
     }
 
