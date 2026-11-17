@@ -275,16 +275,18 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         val level = manager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
         speak("Your battery level is $level percent.")
     }
-
-    private fun openYouTube() {
-        val intent = packageManager.getLaunchIntentForPackage("com.google.android.youtube")
-        if (intent != null) {
-            startActivity(intent)
-            speak("Opening YouTube.")
-        } else {
-            speak("YouTube app is not installed.")
-        }
+private fun openYouTube() {
+    try {
+        val intent = Intent(
+            Intent.ACTION_VIEW,
+            android.net.Uri.parse("https://www.youtube.com")
+        )
+        startActivity(intent)
+        speak("Opening YouTube.")
+    } catch (e: Exception) {
+        speak("Unable to open YouTube.")
     }
+}
 
     override fun onDestroy() {
         recognizer?.destroy()
