@@ -298,4 +298,64 @@ private fun openYouTube() {
         }
         super.onDestroy()
     }
+    
+private fun askGemini(message: String) {
+    Thread {
+        var connection: HttpURLConnection? = null
+
+        try {
+            val url = URL(
+                "https://jarvis-gemini-api.rameshbabumocharla.workers.dev/"
+            )
+
+            connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 15000
+                readTimeout = 30000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+            }
+
+            val json = JSONObject().apply {
+                put("message", message)
+            }
+
+            connection.outputStream.use { output ->
+                output.write(json.toString().toByteArray(Charsets.UTF_8))
+            }
+
+            val responseCode = connection.responseCode
+            val responseStream =
+                if (responseCode in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
+
+            val responseText = responseStream.bufferedReader().use {
+                it.readText()
+            }
+
+            val result = JSONObject(responseText)
+
+            val answer = if (responseCode in 200..299) {
+                result.optString("reply", "I could not generate a response.")
+            } else {
+                "Gemini error: ${result.optString("error", "Request failed.")}"
+            }
+
+            runOnUiThread {
+                speak(answer)
+            }
+
+        } catch (e: Exception) {
+            runOnUiThread {
+                speak("Unable to connect to Gemini. Please check your internet.")
+            }
+        } finally {
+            connection?.disconnect()
+        }
+    }.start()
+}
+
 }
