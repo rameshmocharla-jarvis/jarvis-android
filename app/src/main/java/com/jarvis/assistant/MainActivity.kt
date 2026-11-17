@@ -35,8 +35,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) startListening()
-            else speak("Microphone permission is required.")
+            if (granted) {
+    startWakeWordService()
+    startListening()
+} else {
+    speak("Microphone permission is required.")
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,15 +142,15 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun checkMicrophonePermission() {
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            startListening()
-        } else {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
+    if (ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED) {
+        startWakeWordService()
+        startListening()
+    } else {
+        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
     }
 
     private fun startListening() {
@@ -360,5 +364,19 @@ private fun askGemini(message: String) {
         }
     }.start()
 }
+private fun startWakeWordService() {
+    if (ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) != PackageManager.PERMISSION_GRANTED
+    ) {
+        speak("Please activate voice first and grant microphone permission.")
+        return
+    }
 
+    val intent = Intent(this, WakeWordService::class.java)
+    ContextCompat.startForegroundService(this, intent)
+
+    speak("JARVIS background service started.")
+}
 }
