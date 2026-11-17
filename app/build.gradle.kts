@@ -32,6 +32,6 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.0")
 
     // JARVIS Wake Word Detection
-    implementation("ai.picovoice:porcupine-android:4.0.2")
+    implementation("xyz.rementia:openwakeword:0.1.5")
 }
 
