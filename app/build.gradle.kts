@@ -32,6 +32,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.0")
 
     // JARVIS Wake Word Detection
+    implementation("com.github.k2-fsa:sherpa-onnx:2.0.1")
     
 }
 
